@@ -1,6 +1,119 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+// From: http://hg.mozilla.org/mozilla-central/raw-file/ec10630b1a54/js/src/devtools/jint/sunspider/string-base64.js
+
+/*jslint white: false */
+/*global console */
+
+var Base64 = {
+  /* Convert data (an array of integers) to a Base64 string. */
+  toBase64Table : 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='.split(''),
+  base64Pad     : '=',
+
+  encode: function (data) {
+    "use strict";
+    var result = '';
+    var toBase64Table = Base64.toBase64Table;
+    var length = data.length;
+    var lengthpad = (length % 3);
+    // Convert every three bytes to 4 ascii characters.
+
+    for (var i = 0; i < (length - 2); i += 3) {
+      result += toBase64Table[data[i] >> 2];
+      result += toBase64Table[((data[i] & 0x03) << 4) + (data[i + 1] >> 4)];
+      result += toBase64Table[((data[i + 1] & 0x0f) << 2) + (data[i + 2] >> 6)];
+      result += toBase64Table[data[i + 2] & 0x3f];
+    }
+
+    // Convert the remaining 1 or 2 bytes, pad out to 4 characters.
+    var j = 0;
+    if (lengthpad === 2) {
+      j = length - lengthpad;
+      result += toBase64Table[data[j] >> 2];
+      result += toBase64Table[((data[j] & 0x03) << 4) + (data[j + 1] >> 4)];
+      result += toBase64Table[(data[j + 1] & 0x0f) << 2];
+      result += toBase64Table[64];
+    } else if (lengthpad === 1) {
+      j = length - lengthpad;
+      result += toBase64Table[data[j] >> 2];
+      result += toBase64Table[(data[j] & 0x03) << 4];
+      result += toBase64Table[64];
+      result += toBase64Table[64];
+    }
+
+    return result;
+  },
+
+  /* Convert Base64 data to a string */
+  /* jshint -W013 */
+  toBinaryTable : [
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,62, -1,-1,-1,63,
+    52,53,54,55, 56,57,58,59, 60,61,-1,-1, -1, 0,-1,-1,
+    -1, 0, 1, 2,  3, 4, 5, 6,  7, 8, 9,10, 11,12,13,14,
+    15,16,17,18, 19,20,21,22, 23,24,25,-1, -1,-1,-1,-1,
+    -1,26,27,28, 29,30,31,32, 33,34,35,36, 37,38,39,40,
+    41,42,43,44, 45,46,47,48, 49,50,51,-1, -1,-1,-1,-1
+  ],
+  /* jshint +W013 */
+
+  decode: function (data, offset) {
+    "use strict";
+    offset = typeof(offset) !== 'undefined' ? offset : 0;
+    var toBinaryTable = Base64.toBinaryTable;
+    var base64Pad = Base64.base64Pad;
+    var result, result_length;
+    var leftbits = 0; // number of bits decoded, but yet to be appended
+    var leftdata = 0; // bits decoded, but yet to be appended
+    var data_length = data.indexOf('=') - offset;
+
+    if (data_length < 0) { data_length = data.length - offset; }
+
+    /* Every four characters is 3 resulting numbers */
+    result_length = (data_length >> 2) * 3 + Math.floor((data_length % 4) / 1.5);
+    result = new Array(result_length);
+
+    // Convert one by one.
+    for (var idx = 0, i = offset; i < data.length; i++) {
+      var c = toBinaryTable[data.charCodeAt(i) & 0x7f];
+      var padding = (data.charAt(i) === base64Pad);
+      // Skip illegal characters and whitespace
+      if (c === -1) {
+        console.error("Illegal character code " + data.charCodeAt(i) + " at position " + i);
+        continue;
+      }
+
+      // Collect data into leftdata, update bitcount
+      leftdata = (leftdata << 6) | c;
+      leftbits += 6;
+
+      // If we have 8 or more bits, append 8 bits to the result
+      if (leftbits >= 8) {
+        leftbits -= 8;
+        // Append if not padding.
+        if (!padding) {
+          result[idx++] = (leftdata >> leftbits) & 0xff;
+        }
+        leftdata &= (1 << leftbits) - 1;
+      }
+    }
+
+    // If there are any bits left, the base64 string was corrupted
+    if (leftbits) {
+      err = new Error('Corrupted base64 string');
+      err.name = 'Base64-Error';
+      throw err;
+    }
+
+    return result;
+  }
+}; /* End of Base64 namespace */
 
 // From: http://hg.mozilla.org/mozilla-central/raw-file/ec10630b1a54/js/src/devtools/jint/sunspider/string-base64.js
 
@@ -82,7 +195,7 @@ angular.module('noVNC.util', []).factory('Base64', [function() {
 					console.error('Illegal character code ' + data.charCodeAt(i) + ' at position ' + i);
 					continue;
 				}
-				
+
 				// Collect data into leftdata, update bitcount
 				leftdata = (leftdata << 6) | c;
 				leftbits += 6;
@@ -135,16 +248,16 @@ angular.module('noVNC.util', []).factory('Base64', [function() {
  *
  * Permission to use, copy, modify, and distribute this software
  * and its documentation for NON-COMMERCIAL or COMMERCIAL purposes and
- * without fee is hereby granted, provided that this copyright notice is kept 
- * intact. 
- * 
+ * without fee is hereby granted, provided that this copyright notice is kept
+ * intact.
+ *
  * WIDGET WORKSHOP MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE SUITABILITY
  * OF THE SOFTWARE, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
  * TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
  * PARTICULAR PURPOSE, OR NON-INFRINGEMENT. WIDGET WORKSHOP SHALL NOT BE LIABLE
  * FOR ANY DAMAGES SUFFERED BY LICENSEE AS A RESULT OF USING, MODIFYING OR
  * DISTRIBUTING THIS SOFTWARE OR ITS DERIVATIVES.
- * 
+ *
  * THIS SOFTWARE IS NOT DESIGNED OR INTENDED FOR USE OR RESALE AS ON-LINE
  * CONTROL EQUIPMENT IN HAZARDOUS ENVIRONMENTS REQUIRING FAIL-SAFE
  * PERFORMANCE, SUCH AS IN THE OPERATION OF NUCLEAR FACILITIES, AIRCRAFT
@@ -1181,7 +1294,7 @@ function (Util, KeyEventDecoder, kbdUtil, VerifyCharModifier, TrackKeyState, Esc
 		]);
 
 
-		// 
+		//
 		// Private functions
 		//
 
@@ -1341,7 +1454,7 @@ input.factory('Mouse', ['Util', function (Util) {
 			}
 			mouseCaptured = false;
 		}
-		// 
+		//
 		// Private functions
 		//
 
@@ -1371,7 +1484,7 @@ input.factory('Mouse', ['Util', function (Util) {
 					if (doubleClickTimer == null) {
 						lastTouchPos = pos;
 					} else {
-						clearTimeout(doubleClickTimer); 
+						clearTimeout(doubleClickTimer);
 
 						// When the distance between the two touches is small enough
 						// force the position of the latter touch to the position of
@@ -1567,12 +1680,12 @@ unzip.factory('JSUnzip', ['TINF', function(TINF) {
 		this.getInt = function(offset, size) {
 			switch (size) {
 			case 4:
-				return  (this.data.charCodeAt(offset + 3) & 0xff) << 24 | 
-						(this.data.charCodeAt(offset + 2) & 0xff) << 16 | 
-						(this.data.charCodeAt(offset + 1) & 0xff) << 8 | 
+				return  (this.data.charCodeAt(offset + 3) & 0xff) << 24 |
+						(this.data.charCodeAt(offset + 2) & 0xff) << 16 |
+						(this.data.charCodeAt(offset + 1) & 0xff) << 8 |
 						(this.data.charCodeAt(offset + 0) & 0xff);
 			case 2:
-				return  (this.data.charCodeAt(offset + 1) & 0xff) << 8 | 
+				return  (this.data.charCodeAt(offset + 1) & 0xff) << 8 |
 						(this.data.charCodeAt(offset + 0) & 0xff);
 			default:
 				return this.data.charCodeAt(offset) & 0xff;
@@ -1602,7 +1715,7 @@ unzip.factory('JSUnzip', ['TINF', function(TINF) {
 			while (endOfCentralDirectory >= 0 && this.getInt(endOfCentralDirectory, 4) !== 0x06054b50) {
 				--endOfCentralDirectory;
 			}
-			
+
 			if (endOfCentralDirectory < 0) {
 				return { 'status' : false, 'error' : 'Invalid data' };
 			}
@@ -1679,8 +1792,8 @@ unzip.factory('JSUnzip', ['TINF', function(TINF) {
 				fileOffset += 46 + fileNameLength + extraFieldLength + fileCommentLength;
 			}
 			return { 'status' : true };
-		};     
-		
+		};
+
 		var tinf = null;
 
 		this.read = function(fileName) {
@@ -1743,14 +1856,14 @@ unzip.factory('JSUnzip', ['TINF', function(TINF) {
 /*
  * tinflate javascript port by Erik Moller in May 2011.
  * emoller@opera.com
- * 
+ *
  * read_bits() patched by mike@imidio.com to allow
  * reading more then 8 bits (needed in some zlib streams)
  */
 unzip.factory('TINF', [function() {
 	'use strict';
 	return function() {
-			
+
 		this.OK = 0;
 		this.DATA_ERROR = (-3);
 		this.WINDOW_SIZE = 32768;
@@ -1771,7 +1884,7 @@ unzip.factory('TINF', [function() {
 				this.bitcount = 0;
 
 				this.dest = [];
-				
+
 				this.history = [];
 
 				this.ltree = new that.TREE(); /* dynamic length/symbol tree */
@@ -1812,7 +1925,7 @@ unzip.factory('TINF', [function() {
 			for (i = 0; i < delta; ++i) {
 				bits[i] = 0;
 			}
-			
+
 			for (i = 0; i < 30 - delta; ++i) {
 				bits[i + delta] = Math.floor(i / delta);
 			}
@@ -1930,7 +2043,7 @@ unzip.factory('TINF', [function() {
 			bitcount -= num;
 			return [bitcount, tag, idx, val];
 		}
-		
+
 		this.read_bits = function(d, num, base) {
 			if (!num) {
 				return base;
@@ -1949,7 +2062,7 @@ unzip.factory('TINF', [function() {
 				d.tag = d.tag | (d.source[d.sourceIndex++] & 0xff) << d.bitcount;
 				d.bitcount += 8;
 			}
-			
+
 			var sum = 0, cur = 0, len = 0;
 			do {
 				cur = 2 * cur + ((d.tag & (1 << len)) >> len);
@@ -2097,7 +2210,7 @@ unzip.factory('TINF', [function() {
 				d.bitcount = 0;
 				d.tag = 0;
 			}
-			
+
 			/* get length */
 			length = d.source[d.sourceIndex+1];
 			length = 256*length + d.source[d.sourceIndex];
@@ -2185,7 +2298,7 @@ unzip.factory('TINF', [function() {
 			}
 
 			var blocks = 0;
-			
+
 			do {
 				var btype;
 				var res;
@@ -2219,11 +2332,11 @@ unzip.factory('TINF', [function() {
 				}
 
 				blocks++;
-			
+
 			} while (!bfinal && d.sourceIndex < d.source.length);
 
 			d.history = d.history.slice(-this.WINDOW_SIZE);
-			
+
 			return { 'status' : this.OK, 'data' : d.dest };
 		};
 	};
@@ -2505,7 +2618,7 @@ keyboard.factory('kbdUtil', ['keysyms', function(keysyms) {
 		  default: return null;
 	  }
   }
-  
+
   return {
 		hasShortcutModifier : hasShortcutModifier,
 		hasCharModifier :  hasCharModifier,
@@ -2687,7 +2800,7 @@ keyboard.factory('TrackKeyState', function() {
 
 		return function (evt) {
 			var last = state.length !== 0 ? state[state.length-1] : null;
-			
+
 			var makeClone = function() {
 				function Clone(){}
 				return function (obj) { Clone.prototype=obj; return new Clone(); };
@@ -4889,7 +5002,7 @@ angular.module('noVNC.rfb', ['noVNC.input', 'noVNC.display', 'noVNC.jsunzip'])
 				['shared',             'rw', 'bool', true,  'Request shared mode'],
 				['view_only',          'rw', 'bool', false, 'Disable client mouse/keyboard'],
 				['xvp_password_sep',   'rw', 'str',  '@',   'Separator for XVP password fields'],
-				['disconnectTimeout',  'rw', 'int', 3,    'Time (s) to wait for disconnection'],
+				['disconnectTimeout',  'rw', 'int', 3000,    'Time (s) to wait for disconnection'],
 
 				['width',							 'rw', 'int', 0,    'Width of screen'],
 				['height',						 'rw', 'int', 0,    'Height of screen'],
@@ -5138,8 +5251,10 @@ angular.module('noVNC.rfb', ['noVNC.input', 'noVNC.display', 'noVNC.jsunzip'])
 			 *   ServerInitialization (to normal)
 			 */
 			updateState = function(state, statusMsg) {
+
 				var func, cmsg, oldstate = rfb_state;
 
+        console.log(oldstate," ==>  ",state,'   ',statusMsg);
 				if (state === oldstate) {
 					/* Already here, ignore */
 					Util.Debug('Already in state "" + state + "", ignoring.');
@@ -5245,16 +5360,11 @@ angular.module('noVNC.rfb', ['noVNC.input', 'noVNC.display', 'noVNC.jsunzip'])
 						if (oldstate === 'init') {
 							Util.Error('Error while initializing.');
 						}
-
 						// Make sure we transition to disconnected
 						setTimeout(function() { updateState('disconnected'); }, 50);
-
 						break;
-
-
 					default:
 						// No state change action to take
-
 				}
 
 				if ((oldstate === 'failed') && (state === 'disconnected')) {
@@ -6740,7 +6850,7 @@ angular.module('noVNC.rfb', ['noVNC.input', 'noVNC.display', 'noVNC.jsunzip'])
 ]);
 
 
-angular.module('noVNC', ['noVNC.util', 'noVNC.rfb']).directive('vnc', ['WebUtil', 'RFB', 'Util', '$timeout', function(WebUtil, RFB, Util, $timeout) {
+angular.module('noVNC', ['noVNC.util', 'noVNC.rfb']).directive('vnc', ['WebUtil', 'RFB', 'Util', '$timeout', function(WebUtil, RFB, Util, $timeout,$scope,$rootScope) {
 	'use strict';
 	function newInterface() {
 		var UI = {
@@ -6779,7 +6889,7 @@ angular.module('noVNC', ['noVNC.util', 'noVNC.rfb']).directive('vnc', ['WebUtil'
 				UI.setSetting('host', window.location.hostname, true);
 				UI.setSetting('port', port, true);
 				UI.setSetting('password', '', true);
-				UI.setSetting('encrypt', (window.location.protocol === 'https:'), true);
+				UI.setSetting('encrypt', true, true);
 				UI.setSetting('true_color', true, true);
 				UI.setSetting('cursor', !UI.isTouchDevice, true);
 				UI.setSetting('shared', true, true);
@@ -6954,7 +7064,7 @@ angular.module('noVNC', ['noVNC.util', 'noVNC.rfb']).directive('vnc', ['WebUtil'
 					display.set_viewport(true);
 					display.viewportChange(0, 0, new_w, new_h);
 				}
-			},
+			}
 		};
 		return UI;
 	}
@@ -6973,14 +7083,14 @@ angular.module('noVNC', ['noVNC.util', 'noVNC.rfb']).directive('vnc', ['WebUtil'
 			display     : '=',
 			style       : '=',
 			states      : '=',
-			logging     : '=',
+			logging     : '='
 		},
 		link: function(scope, iElement) {
 			var Interface = newInterface();
 
 			Interface.canvas = iElement[0].childNodes[0];
 			Interface.states = scope.states;
-
+      //$rootScope.states=Interface.states;
 			scope.$watch('host', function(host) {
 				Interface.setSetting('host', host);
 				if (Interface.connected) {
@@ -7048,7 +7158,7 @@ angular.module('noVNC', ['noVNC.util', 'noVNC.rfb']).directive('vnc', ['WebUtil'
 						Interface.connected = true;
 						break;
 					case 'disconnected':
-						Interface.connected = false;
+						Interface.connected = true;
 						break;
 					case 'loaded':
 						// klass = 'noVNC_status_normal';
@@ -7672,7 +7782,7 @@ var util = angular.module('noVNC.util');
 
 util.factory('Websock', ['Util', function (Util) {
 	'use strict';
-	
+
 	if (window.WebSocket && !window.WEB_SOCKET_FORCE_FLASH) {
 		window.Websock_native = true;
 	} else if (window.MozWebSocket && !window.WEB_SOCKET_FORCE_FLASH) {
@@ -7815,6 +7925,7 @@ util.factory('Websock', ['Util', function (Util) {
 
 		function decode_message(data) {
 			//Util.Debug('>> decode_message: ' + data);
+
 			if (mode === 'binary') {
 				// push arraybuffer values onto the end
 				var u8 = new Uint8Array(data);
@@ -7903,7 +8014,7 @@ util.factory('Websock', ['Util', function (Util) {
 
 
 		// Set event handlers
-		function on(evt, handler) { 
+		function on(evt, handler) {
 			eventHandlers[evt] = handler;
 		}
 
@@ -7976,12 +8087,12 @@ util.factory('Websock', ['Util', function (Util) {
 			if (test_mode) {
 				websocket = {};
 			} else {
-				websocket = new WebSocket(uri, protocols);
+				websocket = new WebSocket(uri);
 				if (protocols.indexOf('binary') >= 0) {
 					websocket.binaryType = 'arraybuffer';
 				}
 			}
-
+      console.log("befor recv_message");
 			websocket.onmessage = recv_message;
 			websocket.onopen = function() {
 				Util.Debug('>> WebSock.onopen');
@@ -8081,7 +8192,7 @@ angular.module('noVNC.util').factory('WebUtil', ['Util', function(Util) {
 	// Globals defined here
 	var WebUtil = {};
 
-	/* 
+	/*
 	 * ------------------------------------------------------
 	 * Namespaced in WebUtil
 	 * ------------------------------------------------------
@@ -8105,9 +8216,9 @@ angular.module('noVNC.util').factory('WebUtil', ['Util', function(Util) {
 		if (! depth) { depth=2; }
 		if (! parent) { parent= ''; }
 
-		// Print the properties of the passed-in object 
+		// Print the properties of the passed-in object
 		for (i in obj) {
-			if ((depth > 1) && (typeof obj[i] === 'object')) { 
+			if ((depth > 1) && (typeof obj[i] === 'object')) {
 				// Recurse attributes that are objects
 				msg += WebUtil.dirObj(obj[i], depth-1, parent + '.' + i);
 			} else {
@@ -8119,7 +8230,7 @@ angular.module('noVNC.util').factory('WebUtil', ['Util', function(Util) {
 				}
 				if (val.length > 30) {
 					val = val.substr(0,30) + '...';
-				} 
+				}
 				msg += parent + '.' + i + ': ' + val + '\n';
 			}
 		}
@@ -8259,7 +8370,7 @@ angular.module('noVNC.util').factory('WebUtil', ['Util', function(Util) {
 		}
 		for (i=0; i < sheets.length; i += 1) {
 			link = sheets[i];
-			if (link.title === sheet) {    
+			if (link.title === sheet) {
 				Util.Debug('Using stylesheet ' + sheet);
 				link.disabled = false;
 			} else {
